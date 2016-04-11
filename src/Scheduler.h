@@ -32,26 +32,19 @@ public:
 	//std::list<int>* ioList;
 	long priority;
 	void CalculateTurnAroundTime() {
-		turnaroundTime = finishedTime - arrivalTime + totalWaitingTime;
+		turnaroundTime = finishedTime - arrivalTime;
 	}
 };
-
-struct IO
-{
-	long time;
-	struct IO* nextIO;
-};
-
 
 namespace std {
 
 class Scheduler : public std::list<Process> {
 public:
-	Scheduler(char* fileName);
+	Scheduler(const char* fileName);
 	Scheduler();
 	virtual ~Scheduler();
-	int GetTotalTurnAroundTime();
-	int GetTotalAverageWaitingTime();
+	double GetTotalTurnAroundTime();
+	double GetTotalAverageWaitingTime();
 
 private:
 	ifstream _processDataFile;

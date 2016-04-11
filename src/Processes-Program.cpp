@@ -48,6 +48,16 @@ void CheckArrivingProcesses(Scheduler *scheduler, list<Process> *readyQueue, int
 	}
 }
 
+void CheckArrivingProcesses(Scheduler *scheduler, list<Process> *readyQueue, int currentTick, int priority) {
+
+	while (!scheduler->empty() && scheduler->front().arrivalTime <= currentTick) {			//Add processes arrived to ready Queue
+		if(scheduler->front().priority == priority){
+			readyQueue->push_back(scheduler->front());
+			scheduler->pop_front();
+		}
+	}
+}
+
 /*  First Come, First Serve Scheduler
 * This function will take in a queue of processes, sorted by the arrival time
 * needed and schedule each process by that time.  The processes will be put
@@ -142,7 +152,10 @@ void SJFS(Scheduler *scheduler) {
 		if (!readyQueue->empty()) {							//Service the Ready Queue
 			runningProcess = &readyQueue->front();			//get the RunningProcess
 			readyQueue->pop_front();
-			runningProcess->totalWaitingTime += totalTicks - runningProcess->arrivalTime;
+			runningProcess->totalWaitingTime +=
+					totalTicks -
+					runningProcess->arrivalTime
+					- runningProcess->totalProcessedTime;
 
 //			if(runningProcess->ID == 290){
 //				cout << "Running Process ID: " << runningProcess->ID;
@@ -157,7 +170,8 @@ void SJFS(Scheduler *scheduler) {
 				}
 
 				if (ioTime > currentTicks) {
-					runningProcess->arrivalTime = (totalTicks + currentTicks + 5);		//Set new Arrival Time & add back to queue
+					//runningProcess->arrivalTime = (totalTicks + currentTicks + 5);		//Set new Arrival Time & add back to queue
+					runningProcess->arrivalTime = + 5;		//Set new Arrival Time & add back to queue
 					runningProcess->totalProcessedTime += currentTicks;
 					readyQueue->push_back(*runningProcess);
 					runningProcess = nullptr;
@@ -203,6 +217,7 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 	int totalTicks = 0;
 	int currentTicks = 0;
 	int ioTime = 0;
+	int ioFlag = 0;
 	Process *runningProcess;
 
 	while (!scheduler->empty() || !readyQueue->empty()) {			//Queues Not Empty
@@ -212,7 +227,10 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 		if (!readyQueue->empty()) {									//Service the Ready Queue
 			runningProcess = &readyQueue->front();					//get the RunningProcess
 			readyQueue->pop_front();
-			runningProcess->totalWaitingTime += totalTicks - runningProcess->arrivalTime;
+			runningProcess->totalWaitingTime
+				= totalTicks
+				- runningProcess->arrivalTime
+				- runningProcess->totalProcessedTime;
 
 			for (currentTicks = 0; runningProcess != nullptr; currentTicks++) {		//While Process is alive
 				if (runningProcess->numberofIOEvents > 0 && ioTime == 0) {
@@ -221,11 +239,12 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 						ioTime = runningProcess->ioList->front() - runningProcess->totalProcessedTime;
 						runningProcess->ioList->pop();
 						runningProcess->numberofIOEvents -= 1;
+						ioFlag = 1;
 					}
 				}
 
-				if (ioTime == currentTicks) {
-					runningProcess->arrivalTime = (totalTicks + currentTicks + 5);		//Set new Arrival Time & add back to queue
+				if (ioFlag && currentTicks == ioTime) {
+					runningProcess->arrivalTime += 5;		//Set new Arrival Time & add back to queue
 					runningProcess->totalProcessedTime += currentTicks;
 					readyQueue->push_back(*runningProcess);
 					runningProcess = nullptr;
@@ -245,8 +264,8 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 				}
 
 				CheckArrivingProcesses(scheduler, readyQueue, currentTicks + totalTicks);	//get arriving Processes
-				readyQueue->sort(CompareArrivalTime);
 			}
+			ioFlag = 0;
 			ioTime = 0;			//Reset IO Time
 			totalTicks += currentTicks;		//Update TotalTicks
 		}
@@ -261,23 +280,103 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 	cout << finishedScheduler->GetTotalTurnAroundTime() << endl;
 }
 
+/*  Multi-Level Queue Scheduler */
+void MLQS(Scheduler *scheduler, int timeSlice) {
+	list<Process> *topQueue = new list<Process>();
+	list<Process> *bottomQueue = new list<Process>();
+	Scheduler *finishedScheduler = new Scheduler();
+	int totalTicks = 0;
+	int currentTicks = 0;
+	int ioTime = 0;
+	Process *runningProcess;
+
+	while (!scheduler->empty()
+			|| !topQueue->empty()
+			|| !bottomQueue->empty()) {			//Queues Not Empty
+
+		CheckArrivingProcesses(scheduler, topQueue, totalTicks, 1);	//get arriving Processes
+		CheckArrivingProcesses(scheduler, bottomQueue, totalTicks, 0);
+
+
+																	//Service the Ready Queue
+		if (!topQueue->empty()) {
+			runningProcess = &topQueue->front();			//get the RunningProcess
+			topQueue->pop_front();
+			runningProcess->totalWaitingTime += totalTicks - runningProcess->arrivalTime;
+
+//			if(runningProcess->ID == 290){
+//				cout << "Running Process ID: " << runningProcess->ID;
+//				cout << " Time Left: "<< runningProcess->totalCpuTimeNeeded - runningProcess->totalProcessedTime << endl;
+//			}
+
+			for (currentTicks = 0; runningProcess != nullptr; currentTicks++) {		//While Process is alive
+				if (runningProcess->numberofIOEvents > 0 && ioTime == 0) {
+					ioTime = runningProcess->ioList->front();
+					runningProcess->ioList->pop();
+					runningProcess->numberofIOEvents -= 1;
+				}
+
+				if (ioTime > currentTicks) {
+					runningProcess->arrivalTime = (totalTicks + currentTicks + 5);		//Set new Arrival Time & add back to queue
+					runningProcess->totalProcessedTime += currentTicks;
+					topQueue->push_back(*runningProcess);
+					runningProcess = nullptr;
+				}
+				else if ((runningProcess->totalProcessedTime + currentTicks) == runningProcess->totalCpuTimeNeeded) {		//Time is Up for this Process
+					runningProcess->totalProcessedTime = runningProcess->totalCpuTimeNeeded;
+					runningProcess->finishedTime = currentTicks + totalTicks;
+					runningProcess->CalculateTurnAroundTime();
+					finishedScheduler->push_back(*runningProcess);
+					cout << "Finished Queue -> " << runningProcess->ID << " total = " << finishedScheduler->size() << endl;
+					runningProcess = nullptr;
+				}
+
+				CheckArrivingProcesses(scheduler, topQueue, currentTicks + totalTicks);	//get arriving Processes
+			}
+			ioTime = 0;			//Reset IO Time
+			totalTicks += currentTicks;		//Update TotalTicks
+		}
+		else {
+			totalTicks++;
+		}
+	}
+
+	cout << "The Total Average Waiting Time for Multi-Level Queue is..." << endl;
+	cout << finishedScheduler->GetTotalAverageWaitingTime() << endl;
+	cout << "The Total Turn Around Time for First Come First Served is..." << endl;
+	cout << finishedScheduler->GetTotalTurnAroundTime() << endl;
+
+}
+
 
 //This program takes no input from the user.
 //It will take the data file provided and simulate
 //process control in an operating system
 int main() {
 	//Init all Data Variables
-	char* dataFile = "data.txt";
-	int rrTimeSlice = 5;				//5 time units for Round Robin Scheduler
+	const char* dataFile = "data.txt";
+	int rrTimeSlice;				//5 time units for Round Robin Scheduler
+
+	cout << "Enter the Time Slice for the Round Robin Scheduler: ";
+	cin >> rrTimeSlice;
+	cout << endl;
+
+	while (rrTimeSlice < 1){
+		cout << "Please Enter a Time Slice Greater than 0." << endl;
+		cin.clear();
+		cin >> rrTimeSlice;
+		cout << endl;
+	}
 
 	Scheduler *fcfsScheduler = new Scheduler(dataFile);
 	Scheduler *sjfScheduler = new Scheduler(dataFile);
 	Scheduler *rrScheduler = new Scheduler(dataFile);
+	Scheduler *mlqScheduler = new Scheduler(dataFile);
 
 	FCFS(fcfsScheduler);
 	SJFS(sjfScheduler);
 	RRS(rrScheduler, rrTimeSlice);
-
+	MLQS(mlqScheduler, rrTimeSlice);
 
 	return 0;
 }

@@ -9,7 +9,7 @@
 
 namespace std {
 
-Scheduler::Scheduler(char* fileName) {
+Scheduler::Scheduler(const char* fileName) {
 		//initialize Data Structures
 		this->_processDataFile.open(fileName);
 		if (!_processDataFile.is_open()){
@@ -76,24 +76,24 @@ Process* Scheduler::GetNewProcessStruct(){
 	return tempProcess;
 }
 
-int Scheduler::GetTotalTurnAroundTime(){
+double Scheduler::GetTotalTurnAroundTime(){
 	int totalTurnAroundTime = 0;
 
 	for (std::list<Process>::iterator it = this->begin(); it != this->end(); it++){
 		totalTurnAroundTime += it->turnaroundTime;
 	}
 
-	return totalTurnAroundTime;
+	return totalTurnAroundTime / (double) this->size();
 }
 
-int Scheduler::GetTotalAverageWaitingTime(){
+double Scheduler::GetTotalAverageWaitingTime(){
 	int totalWaitingTime = 0;
 
 	for (std::list<Process>::iterator it = this->begin(); it != this->end(); it++){
 		totalWaitingTime += it->totalWaitingTime;
 	}
 
-	return totalWaitingTime / this->size();
+	return totalWaitingTime / (double)this->size();
 }
 
 } /* namespace std */
