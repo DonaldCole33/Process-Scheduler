@@ -55,6 +55,9 @@ void CheckArrivingProcesses(Scheduler *scheduler, list<Process> *readyQueue, int
 			readyQueue->push_back(scheduler->front());
 			scheduler->pop_front();
 		}
+		else{
+			break;
+		}
 	}
 }
 
@@ -280,14 +283,16 @@ void RRS(Scheduler *scheduler, int timeSlice) {
 	cout << finishedScheduler->GetTotalTurnAroundTime() << endl;
 }
 
+
 /*  Multi-Level Queue Scheduler */
 void MLQS(Scheduler *scheduler, int timeSlice) {
-	list<Process> *topQueue = new list<Process>();
-	list<Process> *bottomQueue = new list<Process>();
+	Scheduler *topQueue = new Scheduler();
+	Scheduler *bottomQueue = new Scheduler();
 	Scheduler *finishedScheduler = new Scheduler();
 	int totalTicks = 0;
 	int currentTicks = 0;
 	int ioTime = 0;
+	int ioFlag = 0;
 	Process *runningProcess;
 
 	while (!scheduler->empty()
@@ -297,8 +302,6 @@ void MLQS(Scheduler *scheduler, int timeSlice) {
 		CheckArrivingProcesses(scheduler, topQueue, totalTicks, 1);	//get arriving Processes
 		CheckArrivingProcesses(scheduler, bottomQueue, totalTicks, 0);
 
-
-																	//Service the Ready Queue
 		if (!topQueue->empty()) {
 			runningProcess = &topQueue->front();			//get the RunningProcess
 			topQueue->pop_front();
@@ -336,6 +339,51 @@ void MLQS(Scheduler *scheduler, int timeSlice) {
 			ioTime = 0;			//Reset IO Time
 			totalTicks += currentTicks;		//Update TotalTicks
 		}
+		else if (!bottomQueue->empty()) {							//Service the Bottom Queue
+			runningProcess = &bottomQueue->front();					//get the RunningProcess
+			bottomQueue->pop_front();
+			runningProcess->totalWaitingTime
+				= totalTicks
+				- runningProcess->arrivalTime
+				- runningProcess->totalProcessedTime;
+
+			for (currentTicks = 0; runningProcess != nullptr; currentTicks++) {		//While Process is alive
+				if (runningProcess->numberofIOEvents > 0 && ioTime == 0) {
+					if((runningProcess->ioList->front() - runningProcess->totalProcessedTime)
+							< (timeSlice)){
+						ioTime = runningProcess->ioList->front() - runningProcess->totalProcessedTime;
+						runningProcess->ioList->pop();
+						runningProcess->numberofIOEvents -= 1;
+						ioFlag = 1;
+					}
+				}
+
+				if (ioFlag && currentTicks == ioTime) {
+					runningProcess->arrivalTime += 5;		//Set new Arrival Time & add back to queue
+					runningProcess->totalProcessedTime += currentTicks;
+					bottomQueue->push_back(*runningProcess);
+					runningProcess = nullptr;
+				}
+				else if ((runningProcess->totalProcessedTime + currentTicks) == runningProcess->totalCpuTimeNeeded) {		//Time is Up for this Process
+					runningProcess->totalProcessedTime = runningProcess->totalCpuTimeNeeded;
+					runningProcess->finishedTime = currentTicks + totalTicks;
+					runningProcess->CalculateTurnAroundTime();
+					finishedScheduler->push_back(*runningProcess);
+					cout << "Finished Queue -> " << runningProcess->ID << " total = " << finishedScheduler->size() << endl;
+					runningProcess = nullptr;
+				}
+				else if (currentTicks == timeSlice - 1){
+					runningProcess->totalProcessedTime += timeSlice;
+					bottomQueue->push_back(*runningProcess);
+					runningProcess = nullptr;
+				}
+
+				CheckArrivingProcesses(scheduler, bottomQueue, currentTicks + totalTicks);	//get arriving Processes
+			}
+			ioFlag = 0;
+			ioTime = 0;			//Reset IO Time
+			totalTicks += currentTicks;		//Update TotalTicks
+		}
 		else {
 			totalTicks++;
 		}
@@ -343,7 +391,7 @@ void MLQS(Scheduler *scheduler, int timeSlice) {
 
 	cout << "The Total Average Waiting Time for Multi-Level Queue is..." << endl;
 	cout << finishedScheduler->GetTotalAverageWaitingTime() << endl;
-	cout << "The Total Turn Around Time for First Come First Served is..." << endl;
+	cout << "The Total Turn Around Time for Multi-Level Queue is..." << endl;
 	cout << finishedScheduler->GetTotalTurnAroundTime() << endl;
 
 }
